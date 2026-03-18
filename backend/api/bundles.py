@@ -65,13 +65,18 @@ async def upload_bundle(file: UploadFile, user: dict = Depends(get_current_user)
             await update_bundle_status(pool, bundle_id, "processing")
 
             # Step 1: Extract
+            yield f"data: {json.dumps({'type': 'status', 'step': 'extracting', 'message': 'Extracting bundle...'})}\n\n"
             extracted_path = extract_bundle(tmp_file.name)
-            yield f"data: {json.dumps({'type': 'status', 'content': 'Bundle extracted successfully'})}\n\n"
 
             # Step 2: Rule-based scan
+            yield f"data: {json.dumps({'type': 'status', 'step': 'scanning', 'message': 'Scanning files...'})}\n\n"
             rule_findings = scan_bundle(extracted_path)
             num_findings = len(rule_findings["findings"])
-            yield f"data: {json.dumps({'type': 'status', 'content': f'Scan complete: {num_findings} findings'})}\n\n"
+            yield f"data: {json.dumps({'type': 'status', 'step': 'scanning', 'message': f'Scan complete — {num_findings} findings'})}\n\n"
+
+            # Step 2.5: Parse structured cluster data (pods, nodes, events)
+            from analyzer.cluster_parser import parse_cluster_data
+            cluster_data = parse_cluster_data(extracted_path)
 
             # Step 3: Create initial analysis record
             initial_analysis = await create_analysis(
@@ -82,6 +87,7 @@ async def upload_bundle(file: UploadFile, user: dict = Depends(get_current_user)
                 llm_diagnosis="",
                 severity="info",
                 embedding=None,
+                cluster_data=cluster_data,
             )
             analysis_id = initial_analysis["id"]
 

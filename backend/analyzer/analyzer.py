@@ -237,6 +237,9 @@ SEVERITY: critical/warning/info
 3. [Third action]
 4. [Additional actions as needed]"""
 
+    # Signal that AI analysis is starting
+    yield f"data: {json.dumps({'type': 'status', 'step': 'analyzing', 'message': 'Running AI analysis...'})}\n\n"
+
     # Stream from OpenAI with LangFuse tracing
     client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
     full_diagnosis = ""
@@ -284,6 +287,9 @@ SEVERITY: critical/warning/info
         error_msg = "Analysis failed due to an LLM error. Rule-based findings are still available above."
         full_diagnosis = error_msg
         yield f"data: {json.dumps({'type': 'token', 'content': error_msg})}\n\n"
+
+    # Signal finalizing step
+    yield f"data: {json.dumps({'type': 'status', 'step': 'finalizing', 'message': 'Finalizing...'})}\n\n"
 
     # Extract severity from the diagnosis
     severity = _extract_severity(full_diagnosis)

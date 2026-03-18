@@ -114,9 +114,11 @@ async def create_analysis(
     llm_diagnosis: str,
     severity: str,
     embedding: Optional[list[float]] = None,
+    cluster_data: Optional[dict] = None,
 ) -> dict:
     """Create a new analysis record."""
     findings_json = json.dumps(rule_findings)
+    cluster_data_json = json.dumps(cluster_data) if cluster_data else None
     embedding_str = None
     if embedding:
         embedding_str = "[" + ",".join(str(f) for f in embedding) + "]"
@@ -124,8 +126,8 @@ async def create_analysis(
     async with pool.acquire() as conn:
         row = await conn.fetchrow(
             """
-            INSERT INTO analyses (bundle_id, user_id, rule_findings, llm_diagnosis, severity, embedding)
-            VALUES ($1, $2, $3::jsonb, $4, $5, $6::vector)
+            INSERT INTO analyses (bundle_id, user_id, rule_findings, llm_diagnosis, severity, embedding, cluster_data)
+            VALUES ($1, $2, $3::jsonb, $4, $5, $6::vector, $7::jsonb)
             RETURNING id, bundle_id, user_id, rule_findings, llm_diagnosis, severity, created_at
             """,
             bundle_id,
@@ -134,6 +136,7 @@ async def create_analysis(
             llm_diagnosis,
             severity,
             embedding_str,
+            cluster_data_json,
         )
     result = dict(row)
     if result.get("rule_findings") and isinstance(result["rule_findings"], str):
@@ -287,3 +290,63 @@ async def find_similar_analyses(
         rows = await conn.fetch(query, *params)
 
     return [dict(r) for r in rows]
+
+
+# --- Dashboard ---
+
+async def get_latest_analysis_with_cluster_data(
+    pool: asyncpg.Pool, user_id: UUID
+) -> Optional[dict]:
+    """Get the most recent completed analysis with cluster_data for the dashboard."""
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            """
+            SELECT a.id, a.bundle_id, a.severity, a.cluster_data, a.rule_findings, a.created_at,
+                   b.filename
+            FROM analyses a
+            JOIN bundles b ON b.id = a.bundle_id
+            WHERE a.user_id = $1 AND b.status = 'completed'
+            ORDER BY a.created_at DESC
+            LIMIT 1
+            """,
+            user_id,
+        )
+    if not row:
+        return None
+    result = dict(row)
+    if result.get("rule_findings") and isinstance(result["rule_findings"], str):
+        result["rule_findings"] = json.loads(result["rule_findings"])
+    if result.get("cluster_data") and isinstance(result["cluster_data"], str):
+        result["cluster_data"] = json.loads(result["cluster_data"])
+    return result
+
+
+async def get_analyses_summary(pool: asyncpg.Pool, user_id: UUID) -> list[dict]:
+    """Get all analyses with bundle info for the history table."""
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            """
+            SELECT a.id AS analysis_id, a.bundle_id, a.severity, a.rule_findings, a.created_at,
+                   b.filename, b.uploaded_at
+            FROM analyses a
+            JOIN bundles b ON b.id = a.bundle_id
+            WHERE a.user_id = $1 AND b.status = 'completed'
+            ORDER BY b.uploaded_at DESC
+            """,
+            user_id,
+        )
+    results = []
+    for r in rows:
+        d = dict(r)
+        findings = d.get("rule_findings")
+        if findings and isinstance(findings, str):
+            findings = json.loads(findings)
+        finding_list = findings.get("findings", []) if isinstance(findings, dict) else []
+        d["finding_counts"] = {
+            "critical": sum(1 for f in finding_list if f.get("severity") == "critical"),
+            "warning": sum(1 for f in finding_list if f.get("severity") == "warning"),
+            "info": sum(1 for f in finding_list if f.get("severity") == "info"),
+        }
+        del d["rule_findings"]  # Don't send full findings to history table
+        results.append(d)
+    return results

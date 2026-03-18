@@ -138,6 +138,76 @@ export async function getSimilar(analysisId: string): Promise<SimilarIncident[]>
   return handleResponse(res);
 }
 
+// ---------- Dashboard ----------
+
+export interface ClusterPod {
+  name: string;
+  namespace: string;
+  status: string;
+  node: string;
+  ready: boolean;
+  containers: Array<{ name: string; ready: boolean; restarts: number }>;
+}
+
+export interface ClusterNode {
+  name: string;
+  status: string;
+  conditions: Array<{ type: string; status: string }>;
+}
+
+export interface ClusterEvent {
+  timestamp: string;
+  reason: string;
+  message: string;
+  kind: string;
+  name: string;
+  namespace: string;
+  type: string;
+}
+
+export interface ClusterData {
+  pods: ClusterPod[];
+  nodes: ClusterNode[];
+  events: ClusterEvent[];
+  summary: {
+    total_pods: number;
+    healthy_pods: number;
+    unhealthy_pods: number;
+    node_count: number;
+    event_count: number;
+  };
+}
+
+export interface AnalysisHistoryItem {
+  analysis_id: string;
+  bundle_id: string;
+  filename: string;
+  uploaded_at: string;
+  severity: string;
+  created_at: string;
+  finding_counts: { critical: number; warning: number; info: number };
+}
+
+export interface DashboardData {
+  latest_analysis: {
+    id: string;
+    bundle_id: string;
+    filename: string;
+    severity: string;
+    created_at: string;
+    cluster_data: ClusterData | null;
+    rule_findings: { findings: Array<{ rule: string; severity: string; description: string; file: string }> };
+  } | null;
+  analyses_history: AnalysisHistoryItem[];
+}
+
+export async function getDashboardData(): Promise<DashboardData> {
+  const res = await fetch(`${API_URL}/dashboard-data`, {
+    headers: getHeaders(),
+  });
+  return handleResponse(res);
+}
+
 // ---------- Chat ----------
 
 export interface ChatMessage {

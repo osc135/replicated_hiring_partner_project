@@ -4,6 +4,7 @@ import ProtectedRoute from './components/ProtectedRoute';
 import Layout from './components/Layout';
 import LoginPage from './pages/LoginPage';
 import DashboardPage from './pages/DashboardPage';
+import UploadPage from './pages/UploadPage';
 import AnalysisPage from './pages/AnalysisPage';
 
 function App() {
@@ -18,6 +19,16 @@ function App() {
               <ProtectedRoute>
                 <Layout>
                   <DashboardPage />
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/upload"
+            element={
+              <ProtectedRoute>
+                <Layout>
+                  <UploadPage />
                 </Layout>
               </ProtectedRoute>
             }

@@ -6,7 +6,13 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from api.auth import get_current_user
 from db.database import get_pool
 from db.models import AnalysisResponse, SimilarIncident
-from db.queries import get_analysis_by_bundle, get_analysis_by_id, find_similar_analyses
+from db.queries import (
+    get_analysis_by_bundle,
+    get_analysis_by_id,
+    find_similar_analyses,
+    get_latest_analysis_with_cluster_data,
+    get_analyses_summary,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -64,3 +70,16 @@ async def get_similar_incidents(analysis_id: UUID, user: dict = Depends(get_curr
     )
 
     return similar
+
+
+@router.get("/dashboard-data")
+async def get_dashboard_data(user: dict = Depends(get_current_user)):
+    """Get dashboard data: latest analysis with cluster data + history."""
+    pool = get_pool()
+    latest = await get_latest_analysis_with_cluster_data(pool, user["id"])
+    history = await get_analyses_summary(pool, user["id"])
+
+    return {
+        "latest_analysis": latest,
+        "analyses_history": history,
+    }

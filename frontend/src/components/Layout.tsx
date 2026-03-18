@@ -1,5 +1,5 @@
 import { NavLink, useNavigate, useLocation } from 'react-router-dom';
-import { LayoutDashboard, LogOut, Box, Menu, X, FileText, Loader2, ChevronDown, ChevronRight } from 'lucide-react';
+import { LayoutDashboard, LogOut, Box, Menu, X, FileText, Loader2, ChevronDown, ChevronRight, Upload } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { getBundles, type Bundle } from '../api';
@@ -59,6 +59,20 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         >
           <LayoutDashboard className="h-5 w-5 shrink-0" />
           Dashboard
+        </NavLink>
+        <NavLink
+          to="/upload"
+          onClick={() => setSidebarOpen(false)}
+          className={({ isActive }) =>
+            `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+              isActive
+                ? 'bg-slate-800 text-white'
+                : 'text-slate-300 hover:bg-slate-800/60 hover:text-white'
+            }`
+          }
+        >
+          <Upload className="h-5 w-5 shrink-0" />
+          New Analysis
         </NavLink>
       </nav>
 

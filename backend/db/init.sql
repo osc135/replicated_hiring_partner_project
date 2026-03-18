@@ -26,6 +26,12 @@ CREATE TABLE IF NOT EXISTS analyses (
     created_at TIMESTAMP DEFAULT NOW()
 );
 
+-- Add cluster_data column for structured pod/node/event data
+DO $$ BEGIN
+    ALTER TABLE analyses ADD COLUMN cluster_data JSONB;
+EXCEPTION WHEN duplicate_column THEN NULL;
+END $$;
+
 CREATE TABLE IF NOT EXISTS chat_messages (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     analysis_id UUID REFERENCES analyses(id),
