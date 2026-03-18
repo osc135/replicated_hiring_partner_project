@@ -1,6 +1,7 @@
 import logging
 import os
 from pathlib import Path
+from typing import Optional
 
 import asyncpg
 
@@ -8,7 +9,7 @@ from config import settings
 
 logger = logging.getLogger(__name__)
 
-_pool: asyncpg.Pool | None = None
+_pool: Optional[asyncpg.Pool] = None
 
 
 async def create_pool() -> asyncpg.Pool:
