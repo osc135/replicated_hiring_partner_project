@@ -9,6 +9,7 @@ from openai import AsyncOpenAI
 
 from config import settings
 from db.queries import find_similar_analyses
+from observability import get_langfuse
 
 logger = logging.getLogger(__name__)
 
@@ -206,7 +207,10 @@ async def analyze_bundle(
 ## Similar past incidents:
 {_format_similar_incidents(similar_incidents)}
 
-Analyze this support bundle. Output your response in this exact format:
+Analyze this support bundle and respond using valid Markdown with proper heading syntax.
+You MUST use ## and ### prefixes for headings. Do NOT output headings as plain text.
+
+Use this EXACT format (note the ## and ### prefixes are required):
 
 SEVERITY: critical/warning/info
 
@@ -214,22 +218,50 @@ SEVERITY: critical/warning/info
 [2-3 sentence overview of what's wrong]
 
 ## Findings
-[For each issue found:]
+
 ### [Issue Name]
 - **Status**: [What's happening]
 - **Evidence**: [Specific log lines or state that proves this]
 - **Confidence**: [High/Medium/Low]
 - **Affected Resources**: [Pod names, namespaces, etc.]
 
+### [Next Issue Name]
+[Same format as above, repeat for each issue]
+
 ## Root Cause Analysis
 [What's actually causing these issues and how they relate]
 
 ## Recommended Actions
-[Numbered list of specific steps to fix, ordered by priority]"""
+1. [First action — most urgent]
+2. [Second action]
+3. [Third action]
+4. [Additional actions as needed]"""
 
-    # Stream from OpenAI
+    # Stream from OpenAI with LangFuse tracing
     client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
     full_diagnosis = ""
+
+    langfuse = get_langfuse()
+    trace = None
+    generation = None
+    if langfuse:
+        try:
+            trace = langfuse.trace(
+                name="bundle-analysis",
+                metadata={"user_id": user_id},
+                tags=["analysis"],
+            )
+            generation = trace.generation(
+                name="gpt4o-analysis",
+                model="gpt-4o",
+                input={"prompt": prompt[:500] + "..."},
+                metadata={
+                    "rule_findings_count": len(rule_findings.get("findings", [])),
+                    "similar_incidents_count": len(similar_incidents),
+                },
+            )
+        except Exception:
+            logger.exception("Failed to create LangFuse trace")
 
     try:
         stream = await client.chat.completions.create(
@@ -256,12 +288,31 @@ SEVERITY: critical/warning/info
     # Extract severity from the diagnosis
     severity = _extract_severity(full_diagnosis)
 
+    # Log to LangFuse
+    if generation:
+        try:
+            generation.end(output=full_diagnosis[:1000], metadata={"severity": severity})
+        except Exception:
+            logger.debug("Failed to end LangFuse generation")
+    if trace:
+        try:
+            trace.update(output={"severity": severity, "diagnosis_length": len(full_diagnosis)})
+        except Exception:
+            logger.debug("Failed to update LangFuse trace")
+
     # Generate embedding for the full diagnosis
     embedding = None
     try:
         embedding = await _get_embedding(full_diagnosis)
     except Exception:
         logger.exception("Failed to generate embedding")
+
+    # Flush LangFuse
+    if langfuse:
+        try:
+            langfuse.flush()
+        except Exception:
+            logger.debug("Failed to flush LangFuse")
 
     # Yield internal result event (intercepted by caller, not sent to client)
     yield f"data: {json.dumps({'type': '_result', 'diagnosis': full_diagnosis, 'severity': severity, 'embedding': embedding})}\n\n"

@@ -13,6 +13,7 @@ import {
   Layers,
 } from 'lucide-react';
 import { getAnalysis, getBundle, type Analysis, type Bundle } from '../api';
+import FindingCard from '../components/FindingCard';
 import SeverityBanner from '../components/SeverityBanner';
 import StreamingMarkdown from '../components/StreamingMarkdown';
 import ChatSidebar from '../components/ChatSidebar';
@@ -133,24 +134,16 @@ export default function AnalysisPage() {
             </button>
             {ruleFindingsOpen && (
               <div className="px-5 pb-5 space-y-2">
-                {analysis.rule_findings.findings.map((finding, i) => {
-                  const color =
-                    finding.severity === 'critical' ? 'text-red-600' :
-                    finding.severity === 'warning' ? 'text-amber-600' :
-                    'text-blue-600';
-                  return (
-                    <div key={i} className="flex items-start gap-3 text-sm border-l-2 pl-3 py-1 border-gray-200">
-                      <span className={`font-medium shrink-0 ${color}`}>
-                        [{finding.severity.toUpperCase()}]
-                      </span>
-                      <div className="min-w-0">
-                        <span className="font-medium text-gray-800">{finding.rule}</span>
-                        <span className="text-gray-600"> &mdash; {finding.description}</span>
-                        <p className="text-xs text-gray-400 mt-0.5 font-mono">{finding.file}</p>
-                      </div>
-                    </div>
-                  );
-                })}
+                {analysis.rule_findings.findings.map((finding, i) => (
+                  <FindingCard
+                    key={i}
+                    rule={finding.rule}
+                    severity={finding.severity}
+                    message={finding.description}
+                    file_path={finding.file}
+                    matches={finding.matches}
+                  />
+                ))}
               </div>
             )}
           </div>

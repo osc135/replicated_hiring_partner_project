@@ -8,6 +8,7 @@ from openai import AsyncOpenAI
 
 from api.auth import get_current_user
 from config import settings
+from observability import get_langfuse
 from db.database import get_pool
 from db.models import ChatMessage, ChatRequest
 from db.queries import (
@@ -63,6 +64,24 @@ async def chat_with_analysis(
         client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
         full_response = ""
 
+        langfuse = get_langfuse()
+        trace = None
+        generation = None
+        if langfuse:
+            try:
+                trace = langfuse.trace(
+                    name="chat",
+                    metadata={"user_id": str(user_id), "analysis_id": str(analysis_id)},
+                    tags=["chat"],
+                )
+                generation = trace.generation(
+                    name="gpt4o-chat",
+                    model="gpt-4o",
+                    input={"user_message": body.message},
+                )
+            except Exception:
+                logger.debug("Failed to create LangFuse trace for chat")
+
         try:
             stream = await client.chat.completions.create(
                 model="gpt-4o",
@@ -84,6 +103,18 @@ async def chat_with_analysis(
             error_msg = "Sorry, I encountered an error processing your question. Please try again."
             full_response = error_msg
             yield f"data: {json.dumps({'type': 'token', 'content': error_msg})}\n\n"
+
+        # Log to LangFuse
+        if generation:
+            try:
+                generation.end(output=full_response[:500])
+            except Exception:
+                logger.debug("Failed to end LangFuse generation")
+        if langfuse:
+            try:
+                langfuse.flush()
+            except Exception:
+                logger.debug("Failed to flush LangFuse")
 
         # Save assistant response
         try:

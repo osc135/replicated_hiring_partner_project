@@ -9,6 +9,7 @@ class Settings(BaseSettings):
     LANGFUSE_PUBLIC_KEY: Optional[str] = None
     LANGFUSE_SECRET_KEY: Optional[str] = None
     LANGFUSE_HOST: str = "https://cloud.langfuse.com"
+    LANGFUSE_BASE_URL: Optional[str] = None
 
     @property
     def asyncpg_url(self) -> str:

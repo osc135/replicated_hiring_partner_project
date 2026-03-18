@@ -111,6 +111,7 @@ export interface RuleFinding {
   severity: 'critical' | 'warning' | 'info';
   message: string;
   file_path?: string;
+  matches?: Array<{ line_number: number; line: string }>;
 }
 
 export async function getAnalysis(bundleId: string): Promise<Analysis> {

@@ -1,16 +1,34 @@
-import { NavLink, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, LogOut, Box, Menu, X } from 'lucide-react';
-import { useState } from 'react';
+import { NavLink, useNavigate, useLocation } from 'react-router-dom';
+import { LayoutDashboard, LogOut, Box, Menu, X, FileText, Loader2 } from 'lucide-react';
+import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { getBundles, type Bundle } from '../api';
 
-const navItems = [
-  { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-];
+const severityDot: Record<string, string> = {
+  critical: 'bg-red-500',
+  warning: 'bg-amber-500',
+  info: 'bg-blue-500',
+};
 
 export default function Layout({ children }: { children: React.ReactNode }) {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [bundles, setBundles] = useState<Bundle[]>([]);
+  const [loadingBundles, setLoadingBundles] = useState(true);
+
+  const fetchBundles = () => {
+    getBundles()
+      .then(setBundles)
+      .catch(() => {})
+      .finally(() => setLoadingBundles(false));
+  };
+
+  useEffect(() => {
+    fetchBundles();
+    // Refresh when navigating back to dashboard
+  }, [location.pathname]);
 
   const handleLogout = () => {
     logout();
@@ -25,26 +43,87 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         <span className="text-lg font-semibold text-white tracking-tight">Bundle Analyzer</span>
       </div>
 
-      {/* Nav Links */}
-      <nav className="flex-1 px-3 py-4 space-y-1">
-        {navItems.map(({ to, label, icon: Icon }) => (
-          <NavLink
-            key={to}
-            to={to}
-            onClick={() => setSidebarOpen(false)}
-            className={({ isActive }) =>
-              `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-                isActive
-                  ? 'bg-slate-800 text-white'
-                  : 'text-slate-300 hover:bg-slate-800/60 hover:text-white'
-              }`
-            }
-          >
-            <Icon className="h-5 w-5 shrink-0" />
-            {label}
-          </NavLink>
-        ))}
+      {/* Dashboard nav */}
+      <nav className="px-3 pt-4 pb-2">
+        <NavLink
+          to="/dashboard"
+          onClick={() => setSidebarOpen(false)}
+          className={({ isActive }) =>
+            `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+              isActive
+                ? 'bg-slate-800 text-white'
+                : 'text-slate-300 hover:bg-slate-800/60 hover:text-white'
+            }`
+          }
+        >
+          <LayoutDashboard className="h-5 w-5 shrink-0" />
+          Dashboard
+        </NavLink>
       </nav>
+
+      {/* Past Analyses list */}
+      <div className="flex-1 overflow-y-auto px-3 pb-3">
+        <div className="flex items-center justify-between px-3 py-2">
+          <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">History</span>
+          {bundles.length > 0 && (
+            <span className="text-xs text-slate-500">{bundles.length}</span>
+          )}
+        </div>
+
+        {loadingBundles ? (
+          <div className="flex justify-center py-4">
+            <Loader2 className="h-4 w-4 text-slate-500 animate-spin" />
+          </div>
+        ) : bundles.length === 0 ? (
+          <p className="px-3 py-2 text-xs text-slate-500">No analyses yet</p>
+        ) : (
+          <div className="space-y-0.5">
+            {bundles.map(bundle => {
+              const isActive = location.pathname === `/analysis/${bundle.id}`;
+              return (
+                <button
+                  key={bundle.id}
+                  onClick={() => {
+                    if (bundle.status === 'completed') {
+                      navigate(`/analysis/${bundle.id}`);
+                      setSidebarOpen(false);
+                    }
+                  }}
+                  disabled={bundle.status !== 'completed'}
+                  className={`w-full text-left px-3 py-2.5 rounded-lg text-sm transition-colors group ${
+                    isActive
+                      ? 'bg-slate-800 text-white'
+                      : bundle.status === 'completed'
+                        ? 'text-slate-300 hover:bg-slate-800/60 hover:text-white'
+                        : 'text-slate-500 cursor-default'
+                  }`}
+                >
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <FileText className="h-4 w-4 shrink-0 text-slate-500 group-hover:text-slate-400" />
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-xs font-medium">{bundle.filename}</p>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        {bundle.severity && (
+                          <span className={`w-1.5 h-1.5 rounded-full ${severityDot[bundle.severity] || severityDot.info}`} />
+                        )}
+                        <span className="text-xs text-slate-500">
+                          {new Date(bundle.uploaded_at).toLocaleDateString(undefined, {
+                            month: 'short',
+                            day: 'numeric',
+                          })}
+                        </span>
+                        {bundle.status === 'processing' && (
+                          <Loader2 className="h-3 w-3 text-slate-500 animate-spin" />
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
 
       {/* User + Logout */}
       <div className="px-3 py-4 border-t border-slate-700/50">
@@ -65,7 +144,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex h-screen bg-gray-50">
       {/* Desktop sidebar */}
-      <aside className="hidden lg:flex lg:w-[250px] lg:flex-col bg-slate-900 shrink-0">
+      <aside className="hidden lg:flex lg:w-[260px] lg:flex-col bg-slate-900 shrink-0">
         {sidebar}
       </aside>
 
@@ -73,7 +152,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       {sidebarOpen && (
         <div className="fixed inset-0 z-40 lg:hidden">
           <div className="absolute inset-0 bg-black/50" onClick={() => setSidebarOpen(false)} />
-          <aside className="relative w-[250px] h-full bg-slate-900 z-50">
+          <aside className="relative w-[260px] h-full bg-slate-900 z-50">
             <button
               onClick={() => setSidebarOpen(false)}
               className="absolute top-4 right-3 text-slate-400 hover:text-white"
