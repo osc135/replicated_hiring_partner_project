@@ -1,5 +1,5 @@
 import { NavLink, useNavigate, useLocation } from 'react-router-dom';
-import { LayoutDashboard, LogOut, Box, Menu, X, FileText, Loader2 } from 'lucide-react';
+import { LayoutDashboard, LogOut, Box, Menu, X, FileText, Loader2, ChevronDown, ChevronRight } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { getBundles, type Bundle } from '../api';
@@ -15,6 +15,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const navigate = useNavigate();
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(true);
   const [bundles, setBundles] = useState<Bundle[]>([]);
   const [loadingBundles, setLoadingBundles] = useState(true);
 
@@ -63,14 +64,24 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
       {/* Past Analyses list */}
       <div className="flex-1 overflow-y-auto px-3 pb-3">
-        <div className="flex items-center justify-between px-3 py-2">
-          <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">History</span>
+        <button
+          onClick={() => setHistoryOpen(!historyOpen)}
+          className="w-full flex items-center justify-between px-3 py-2 hover:bg-slate-800/40 rounded-lg transition-colors"
+        >
+          <div className="flex items-center gap-2">
+            {historyOpen ? (
+              <ChevronDown className="h-3.5 w-3.5 text-slate-500" />
+            ) : (
+              <ChevronRight className="h-3.5 w-3.5 text-slate-500" />
+            )}
+            <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">History</span>
+          </div>
           {bundles.length > 0 && (
             <span className="text-xs text-slate-500">{bundles.length}</span>
           )}
-        </div>
+        </button>
 
-        {loadingBundles ? (
+        {!historyOpen ? null : loadingBundles ? (
           <div className="flex justify-center py-4">
             <Loader2 className="h-4 w-4 text-slate-500 animate-spin" />
           </div>
@@ -174,7 +185,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           <span className="font-semibold text-gray-900">Bundle Analyzer</span>
         </div>
 
-        <main className="flex-1 overflow-auto p-6 lg:p-8">
+        <main className="flex-1 flex flex-col min-h-0">
           {children}
         </main>
       </div>

@@ -100,6 +100,14 @@ async def upload_bundle(file: UploadFile, user: dict = Depends(get_current_user)
                         )
                     except Exception:
                         logger.exception("Failed to save analysis results")
+                elif '"type": "done"' in event:
+                    # Inject analysis_id into done event so frontend can chat immediately
+                    try:
+                        done_payload = json.loads(event.replace("data: ", "").strip())
+                        done_payload["analysis_id"] = str(analysis_id)
+                        yield f"data: {json.dumps(done_payload)}\n\n"
+                    except Exception:
+                        yield event
                 else:
                     yield event
 
