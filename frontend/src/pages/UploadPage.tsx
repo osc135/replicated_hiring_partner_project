@@ -263,6 +263,56 @@ function AnalysisBubble({ severity, ruleFindings, analysisText, analysisStreamin
   );
 }
 
+/* ---- Follow-up suggestions (findings-based, after initial analysis) ---- */
+function FollowUpSuggestions({ ruleFindings, onSelect }: { ruleFindings: RuleFinding[]; onSelect: (q: string) => void }) {
+  const questions: string[] = ['What should I fix first?'];
+  const rules = ruleFindings.map(f => f.rule);
+  if (rules.some(r => /CrashLoopBackOff/i.test(r)))
+    questions.push('Why is the pod crash looping and how do I fix it?');
+  if (rules.some(r => /ImagePullBackOff|ErrImagePull/i.test(r)))
+    questions.push('How do I resolve the image pull errors?');
+  if (rules.some(r => /OOMKilled/i.test(r)))
+    questions.push('What memory limits should I set to prevent OOMKill?');
+  if (rules.some(r => /NodeNotReady/i.test(r)))
+    questions.push('Why is the node not ready?');
+  if (rules.some(r => /FailedScheduling/i.test(r)))
+    questions.push('Why are pods failing to schedule?');
+  if (questions.length < 3)
+    questions.push('Are there any other risks I should watch for?');
+  if (questions.length < 4)
+    questions.push('Can you walk me through the root cause?');
+
+  return (
+    <div className="flex flex-wrap gap-2">
+      {questions.slice(0, 4).map((q, i) => (
+        <button key={q} onClick={() => onSelect(q)}
+          className="animate-chip-in text-xs bg-white border border-gray-200 hover:border-blue-300 hover:bg-blue-50 text-gray-600 hover:text-blue-700 rounded-full px-3 py-1.5 transition-colors shadow-sm hover:shadow"
+          style={{ animationDelay: `${i * 80}ms` }}
+        >{q}</button>
+      ))}
+    </div>
+  );
+}
+
+/* ---- Chat follow-ups (after each assistant response) ---- */
+function ChatFollowUps({ onSelect }: { onSelect: (q: string) => void }) {
+  const suggestions = [
+    'Can you explain that in more detail?',
+    'What else should I check?',
+    'Give me the exact commands to fix this',
+  ];
+  return (
+    <div className="flex flex-wrap gap-2">
+      {suggestions.map((q, i) => (
+        <button key={q} onClick={() => onSelect(q)}
+          className="animate-chip-in text-xs bg-white border border-gray-200 hover:border-blue-300 hover:bg-blue-50 text-gray-600 hover:text-blue-700 rounded-full px-3 py-1.5 transition-colors shadow-sm hover:shadow"
+          style={{ animationDelay: `${i * 80}ms` }}
+        >{q}</button>
+      ))}
+    </div>
+  );
+}
+
 /* ---- Collapsible sources list ---- */
 function SourcesToggle({ files }: { files: string[] }) {
   const [open, setOpen] = useState(false);
@@ -668,90 +718,64 @@ export default function UploadPage() {
             />
           )}
 
-          {/* Contextual follow-up suggestions + sources */}
+          {/* Contextual follow-up suggestions + sources (after initial analysis) */}
           {phase === 'chat' && messages.length === 0 && analysisId && (
             <div className="mt-4 ml-11 space-y-3">
-              {/* Suggested questions based on actual findings */}
-              <div className="flex flex-wrap gap-2">
-                {(() => {
-                  const questions: string[] = ['What should I fix first?'];
-                  const rules = ruleFindings.map(f => f.rule);
-                  if (rules.some(r => /CrashLoopBackOff/i.test(r)))
-                    questions.push('Why is the pod crash looping and how do I fix it?');
-                  if (rules.some(r => /ImagePullBackOff|ErrImagePull/i.test(r)))
-                    questions.push('How do I resolve the image pull errors?');
-                  if (rules.some(r => /OOMKilled/i.test(r)))
-                    questions.push('What memory limits should I set to prevent OOMKill?');
-                  if (rules.some(r => /NodeNotReady/i.test(r)))
-                    questions.push('Why is the node not ready?');
-                  if (rules.some(r => /FailedScheduling/i.test(r)))
-                    questions.push('Why are pods failing to schedule?');
-                  if (questions.length < 3)
-                    questions.push('Are there any other risks I should watch for?');
-                  if (questions.length < 4)
-                    questions.push('Can you walk me through the root cause?');
-                  return questions.slice(0, 4).map((q, i) => (
-                    <button
-                      key={q}
-                      onClick={() => {
-                        setInput(q);
-                        setTimeout(() => { inputRef.current?.focus(); }, 0);
-                      }}
-                      className="animate-chip-in text-xs bg-white border border-gray-200 hover:border-blue-300 hover:bg-blue-50 text-gray-600 hover:text-blue-700 rounded-full px-3 py-1.5 transition-colors shadow-sm hover:shadow"
-                      style={{ animationDelay: `${i * 80}ms` }}
-                    >
-                      {q}
-                    </button>
-                  ));
-                })()}
-              </div>
-
-              {/* Files analyzed toggle */}
+              <FollowUpSuggestions ruleFindings={ruleFindings} onSelect={(q) => { setInput(q); setTimeout(() => { inputRef.current?.focus(); }, 0); }} />
               {ruleFindings.length > 0 && (() => {
                 const files = [...new Set(ruleFindings.map(f => f.file_path).filter(Boolean))];
                 if (files.length === 0) return null;
-                return (
-                  <SourcesToggle files={files as string[]} />
-                );
+                return <SourcesToggle files={files as string[]} />;
               })()}
             </div>
           )}
 
           {/* Follow-up chat messages */}
-          {messages.map((msg, i) => (
-            <div key={i} className="mt-4 flex gap-3 animate-fade-in-up">
-              {msg.role === 'user' ? (
-                <>
-                  <div className="shrink-0 w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center">
-                    <User className="h-4 w-4 text-white" />
+          {messages.map((msg, i) => {
+            const isLastAssistant = msg.role === 'assistant' && i === messages.length - 1;
+            const showSuggestions = isLastAssistant && !chatStreaming && msg.content;
+            return (
+              <div key={i}>
+                <div className="mt-4 flex gap-3 animate-fade-in-up">
+                  {msg.role === 'user' ? (
+                    <>
+                      <div className="shrink-0 w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center">
+                        <User className="h-4 w-4 text-white" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <span className="text-sm font-semibold text-gray-900 mb-2 block">You</span>
+                        <div className="bg-blue-50 rounded-xl rounded-tl-sm border border-blue-100 px-4 py-3">
+                          <p className="text-sm text-gray-800 whitespace-pre-wrap">{msg.content}</p>
+                        </div>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <BotAvatar active={chatStreaming && i === messages.length - 1} />
+                      <div className="flex-1 min-w-0">
+                        <span className="text-sm font-semibold text-gray-900 mb-2 block">Bundle Analyzer</span>
+                        <BotBubble>
+                          {msg.content ? (
+                            <StreamingMarkdown
+                              content={msg.content}
+                              streaming={chatStreaming && i === messages.length - 1}
+                            />
+                          ) : (
+                            <TypingDots />
+                          )}
+                        </BotBubble>
+                      </div>
+                    </>
+                  )}
+                </div>
+                {showSuggestions && (
+                  <div className="mt-3 ml-11">
+                    <ChatFollowUps onSelect={(q) => { setInput(q); setTimeout(() => { inputRef.current?.focus(); }, 0); }} />
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <span className="text-sm font-semibold text-gray-900 mb-2 block">You</span>
-                    <div className="bg-blue-50 rounded-xl rounded-tl-sm border border-blue-100 px-4 py-3">
-                      <p className="text-sm text-gray-800 whitespace-pre-wrap">{msg.content}</p>
-                    </div>
-                  </div>
-                </>
-              ) : (
-                <>
-                  <BotAvatar active={chatStreaming && i === messages.length - 1} />
-                  <div className="flex-1 min-w-0">
-                    <span className="text-sm font-semibold text-gray-900 mb-2 block">Bundle Analyzer</span>
-                    <BotBubble>
-                      {msg.content ? (
-                        <StreamingMarkdown
-                          content={msg.content}
-                          streaming={chatStreaming && i === messages.length - 1}
-                        />
-                      ) : (
-                        <TypingDots />
-                      )}
-                    </BotBubble>
-                  </div>
-                </>
-              )}
-            </div>
-          ))}
+                )}
+              </div>
+            );
+          })}
 
           <div className="h-4" />
         </div>
