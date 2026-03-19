@@ -23,20 +23,9 @@ CREATE TABLE IF NOT EXISTS analyses (
     llm_diagnosis TEXT,
     severity VARCHAR(20),
     embedding vector(1536),
+    cluster_data JSONB,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
-
--- Migrate timestamp columns to timestamptz if needed
-ALTER TABLE users ALTER COLUMN created_at TYPE TIMESTAMPTZ USING created_at AT TIME ZONE 'UTC';
-ALTER TABLE bundles ALTER COLUMN uploaded_at TYPE TIMESTAMPTZ USING uploaded_at AT TIME ZONE 'UTC';
-ALTER TABLE analyses ALTER COLUMN created_at TYPE TIMESTAMPTZ USING created_at AT TIME ZONE 'UTC';
-ALTER TABLE chat_messages ALTER COLUMN created_at TYPE TIMESTAMPTZ USING created_at AT TIME ZONE 'UTC';
-
--- Add cluster_data column for structured pod/node/event data
-DO $$ BEGIN
-    ALTER TABLE analyses ADD COLUMN cluster_data JSONB;
-EXCEPTION WHEN duplicate_column THEN NULL;
-END $$;
 
 CREATE TABLE IF NOT EXISTS chat_messages (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

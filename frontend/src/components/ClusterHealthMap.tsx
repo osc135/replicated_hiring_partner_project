@@ -11,16 +11,23 @@ const ERROR_STATUSES = new Set([
   'RunContainerError', 'OOMKilled', 'Error',
 ]);
 
+function hasHighRestarts(pod: ClusterPod): boolean {
+  return pod.containers.some(c => c.restarts > 2);
+}
+
 function getPodStyle(pod: ClusterPod): { border: string; bg: string; text: string; dot: string } {
-  if (pod.ready) return { border: 'border-green-200', bg: 'bg-green-50/60', text: 'text-green-700', dot: 'bg-green-400' };
   if (ERROR_STATUSES.has(pod.status)) return { border: 'border-red-300', bg: 'bg-red-50', text: 'text-red-700', dot: 'bg-red-500' };
+  if (!pod.ready || hasHighRestarts(pod)) return { border: 'border-amber-200', bg: 'bg-amber-50/60', text: 'text-amber-700', dot: 'bg-amber-400' };
   if (pod.status === 'Pending') return { border: 'border-amber-200', bg: 'bg-amber-50/60', text: 'text-amber-700', dot: 'bg-amber-400' };
+  if (pod.ready) return { border: 'border-green-200', bg: 'bg-green-50/60', text: 'text-green-700', dot: 'bg-green-400' };
   return { border: 'border-gray-200', bg: 'bg-gray-50', text: 'text-gray-600', dot: 'bg-gray-400' };
 }
 
 function getStatusLabel(pod: ClusterPod) {
-  if (pod.ready) return 'Running';
-  return pod.status;
+  if (ERROR_STATUSES.has(pod.status)) return pod.status;
+  if (hasHighRestarts(pod)) return 'Unstable';
+  if (!pod.ready) return 'Not Ready';
+  return 'Running';
 }
 
 function PodCard({ pod }: { pod: ClusterPod }) {
