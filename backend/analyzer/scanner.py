@@ -6,6 +6,7 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 RULES = [
+    # --- Kubernetes infrastructure rules ---
     {"name": "CrashLoopBackOff", "pattern": "CrashLoopBackOff", "severity": "critical", "description": "Pod is crash-looping"},
     {"name": "OOMKilled", "pattern": "OOMKilled", "severity": "critical", "description": "Container killed due to memory limit"},
     {"name": "ImagePullBackOff", "pattern": "ImagePullBackOff|ErrImagePull", "severity": "critical", "description": "Cannot pull container image"},
@@ -16,6 +17,17 @@ RULES = [
     {"name": "FailedMount", "pattern": "FailedMount|MountVolume", "severity": "warning", "description": "Volume mount failed"},
     {"name": "BackoffPullImage", "pattern": "Back-off pulling image", "severity": "warning", "description": "Backing off image pull"},
     {"name": "Unhealthy", "pattern": "Unhealthy|probe failed", "severity": "info", "description": "Health probe failing"},
+
+    # --- Application-level rules (pod log signals) ---
+    {"name": "StackTrace", "pattern": r"Traceback \(most recent|Exception in thread|panic:|goroutine \d+|FATAL|fatal error:", "severity": "warning", "description": "Application stack trace or fatal error detected"},
+    {"name": "HTTPServerError", "pattern": r"HTTP[/ ]+5\d{2}|status[= ]+5\d{2}|\b5\d{2} (?:Internal Server Error|Bad Gateway|Service Unavailable)", "severity": "warning", "description": "HTTP 5xx server errors in application logs"},
+    {"name": "ConnectionRefused", "pattern": r"connection refused|ECONNREFUSED|dial tcp .+: connect: connection refused|connect: no route to host", "severity": "warning", "description": "Application cannot reach a dependent service"},
+    {"name": "ConnectionTimeout", "pattern": r"ETIMEDOUT|context deadline exceeded|i/o timeout|request canceled.*timeout|connection timed out", "severity": "warning", "description": "Network timeout connecting to a service"},
+    {"name": "ResourceExhaustion", "pattern": r"too many open files|no space left on device|cannot allocate memory|out of memory", "severity": "critical", "description": "System resource exhaustion (files, disk, memory)"},
+    {"name": "DatabaseError", "pattern": r"deadlock detected|connection pool exhausted|too many connections|database is locked|relation .+ does not exist", "severity": "warning", "description": "Database error detected in application logs"},
+    {"name": "PermissionDenied", "pattern": r"permission denied|EACCES|forbidden|Unauthorized|401 Unauthorized|403 Forbidden", "severity": "warning", "description": "Permission or authorization error"},
+    {"name": "DNSResolutionFailure", "pattern": r"no such host|Name or service not known|NXDOMAIN|DNS lookup failed|could not resolve host", "severity": "critical", "description": "DNS resolution failure — service name cannot be resolved"},
+    {"name": "TLSError", "pattern": r"x509: certificate|tls: handshake failure|SSL_ERROR|certificate verify failed|certificate has expired", "severity": "critical", "description": "TLS/SSL certificate or handshake error"},
 ]
 
 # Compiled patterns for performance

@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Upload, Loader2, Send, Bot, User, CheckCircle, Circle, ChevronDown, ChevronRight, AlertCircle, AlertTriangle, Info } from 'lucide-react';
+import { useNavigate, useLocation } from 'react-router-dom';
+import { Upload, Loader2, Send, Bot, User, CheckCircle, Circle, ChevronDown, ChevronRight, AlertCircle, AlertTriangle, Info, X, FileText, HelpCircle } from 'lucide-react';
 import {
   uploadBundle,
   parseSSEStream,
@@ -110,6 +110,32 @@ const severityStyles = {
   info: { bg: 'bg-blue-50', text: 'text-blue-700', border: 'border-blue-200', Icon: Info },
 };
 
+/* ---- Findings count tooltip ---- */
+function FindingsTooltip({ issueCount, totalMatches }: { issueCount: number; totalMatches: number }) {
+  const [show, setShow] = useState(false);
+  return (
+    <span className="relative inline-flex">
+      <span
+        className="cursor-help text-gray-400 hover:text-gray-500 transition-colors"
+        onMouseEnter={() => setShow(true)}
+        onMouseLeave={() => setShow(false)}
+      >
+        <HelpCircle className="h-3 w-3" />
+      </span>
+      {show && (
+        <span className="absolute top-full right-0 mt-2 w-72 px-3 py-2.5 text-xs text-gray-700 bg-white rounded-lg shadow-lg border border-gray-200 z-50 leading-relaxed">
+          <span className="font-semibold text-gray-900">How findings are counted</span>
+          <br />
+          The scanner detected <span className="font-medium">{totalMatches} matches</span> across multiple files.
+          These are grouped into <span className="font-medium">{issueCount} distinct issue{issueCount !== 1 ? 's' : ''}</span> by
+          rule type (e.g. all CrashLoopBackOff matches count as one issue).
+          The AI analysis discusses each unique issue, not every individual file match.
+        </span>
+      )}
+    </span>
+  );
+}
+
 /* ---- Analysis bubble: compact severity + collapsible findings + streaming text ---- */
 function AnalysisBubble({ severity, ruleFindings, analysisText, analysisStreaming }: {
   severity: 'critical' | 'warning' | 'info' | null;
@@ -131,12 +157,34 @@ function AnalysisBubble({ severity, ruleFindings, analysisText, analysisStreamin
   }, {});
   const uniqueFindings = Object.values(grouped);
 
-  // Count by severity
-  const criticalCount = ruleFindings.filter(f => f.severity === 'critical').length;
-  const warningCount = ruleFindings.filter(f => f.severity === 'warning').length;
-  const infoCount = ruleFindings.filter(f => f.severity === 'info').length;
+  // Count unique issues (by rule name) vs total file matches
+  const uniqueRules = [...new Set(ruleFindings.map(f => f.rule))];
+  const issueCount = uniqueRules.length;
+  const totalMatches = ruleFindings.length;
+
+  // Count by severity (unique rules)
+  const criticalCount = [...new Set(ruleFindings.filter(f => f.severity === 'critical').map(f => f.rule))].length;
+  const warningCount = [...new Set(ruleFindings.filter(f => f.severity === 'warning').map(f => f.rule))].length;
+  const infoCount = [...new Set(ruleFindings.filter(f => f.severity === 'info').map(f => f.rule))].length;
 
   const sev = severity ? severityStyles[severity] : null;
+
+  // Extract the first recommended action once analysis is done
+  const nextStep = (() => {
+    if (analysisStreaming || !analysisText) return null;
+    // Look for Recommended Actions / Recommendations section
+    const actionsMatch = analysisText.match(/##\s*(?:Recommended Actions|Recommendations|Actions)\s*\n([\s\S]*?)(?=\n##\s|\n$|$)/i);
+    if (!actionsMatch) return null;
+    // Get the first list item or meaningful line, strip markdown syntax
+    const lines = actionsMatch[1].trim().split('\n').filter(l => l.trim());
+    const first = lines[0]
+      ?.replace(/^#{1,4}\s*/, '')       // strip heading markers
+      .replace(/^[-*•\d.)\s]+/, '')     // strip list markers
+      .replace(/\*\*/g, '')             // strip bold
+      .replace(/`/g, '')               // strip inline code
+      .trim();
+    return first || null;
+  })();
 
   return (
     <div className="mt-4 flex gap-3 animate-fade-in-up">
@@ -155,19 +203,23 @@ function AnalysisBubble({ severity, ruleFindings, analysisText, analysisStreamin
                   </span>
                 )}
                 {ruleFindings.length > 0 && (
-                  <button
-                    onClick={() => setFindingsOpen(!findingsOpen)}
-                    className="inline-flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-700 transition-colors"
-                  >
-                    {findingsOpen ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
-                    <span>{ruleFindings.length} findings</span>
-                    <span className="text-gray-400">&mdash;</span>
-                    {criticalCount > 0 && <span className="text-red-600 font-medium">{criticalCount} critical</span>}
-                    {criticalCount > 0 && (warningCount > 0 || infoCount > 0) && <span className="text-gray-300">/</span>}
-                    {warningCount > 0 && <span className="text-amber-600 font-medium">{warningCount} warning</span>}
-                    {warningCount > 0 && infoCount > 0 && <span className="text-gray-300">/</span>}
-                    {infoCount > 0 && <span className="text-blue-600 font-medium">{infoCount} info</span>}
-                  </button>
+                  <div className="inline-flex items-center gap-1.5 text-xs text-gray-500">
+                    <button
+                      onClick={() => setFindingsOpen(!findingsOpen)}
+                      className="inline-flex items-center gap-1.5 hover:text-gray-700 transition-colors"
+                    >
+                      {findingsOpen ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+                      <span>{issueCount} issue{issueCount !== 1 ? 's' : ''}</span>
+                      <span className="text-gray-400">({totalMatches} across files)</span>
+                      <span className="text-gray-400">&mdash;</span>
+                      {criticalCount > 0 && <span className="text-red-600 font-medium">{criticalCount} critical</span>}
+                      {criticalCount > 0 && (warningCount > 0 || infoCount > 0) && <span className="text-gray-300">/</span>}
+                      {warningCount > 0 && <span className="text-amber-600 font-medium">{warningCount} warning</span>}
+                      {warningCount > 0 && infoCount > 0 && <span className="text-gray-300">/</span>}
+                      {infoCount > 0 && <span className="text-blue-600 font-medium">{infoCount} info</span>}
+                    </button>
+                    <FindingsTooltip issueCount={issueCount} totalMatches={totalMatches} />
+                  </div>
                 )}
               </div>
             )}
@@ -197,6 +249,13 @@ function AnalysisBubble({ severity, ruleFindings, analysisText, analysisStreamin
             {analysisStreaming && !analysisText && (
               <TypingDots />
             )}
+
+            {/* Next step card — appears after streaming completes */}
+            {nextStep && (
+              <div className="mt-4 rounded-lg px-4 py-3 bg-emerald-50 border border-emerald-200 text-sm text-emerald-800 animate-fade-in-up">
+                <span className="font-semibold">First step:</span> {nextStep}
+              </div>
+            )}
           </div>
         </BotBubble>
       </div>
@@ -204,10 +263,38 @@ function AnalysisBubble({ severity, ruleFindings, analysisText, analysisStreamin
   );
 }
 
+/* ---- Collapsible sources list ---- */
+function SourcesToggle({ files }: { files: string[] }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="animate-chip-in" style={{ animationDelay: '320ms' }}>
+      <button
+        onClick={() => setOpen(!open)}
+        className="inline-flex items-center gap-1.5 text-xs text-gray-400 hover:text-gray-600 transition-colors"
+      >
+        <FileText className="h-3 w-3" />
+        {files.length} file{files.length !== 1 ? 's' : ''} analyzed
+        {open ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+      </button>
+      {open && (
+        <div className="mt-1.5 pl-4 space-y-0.5 animate-slide-up">
+          {files.map(f => (
+            <p key={f} className="text-xs text-gray-400 font-mono truncate" title={f}>
+              {f}
+            </p>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function UploadPage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [phase, setPhase] = useState<Phase>('idle');
   const [fileName, setFileName] = useState('');
+  const [fileSize, setFileSize] = useState<number | null>(null);
   const [severity, setSeverity] = useState<'critical' | 'warning' | 'info' | null>(null);
   const [analysisId, setAnalysisId] = useState<string | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
@@ -228,6 +315,18 @@ export default function UploadPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const isWorking = phase === 'uploading' || analysisStreaming;
+
+  // Handle file passed from dashboard via navigation state
+  const hasHandledNavFile = useRef(false);
+  useEffect(() => {
+    const navState = location.state as { file?: File } | null;
+    if (navState?.file && !hasHandledNavFile.current) {
+      hasHandledNavFile.current = true;
+      // Clear the state so refresh doesn't re-trigger
+      window.history.replaceState({}, '');
+      handleFile(navState.file);
+    }
+  }, [location.state]);
 
   // Auto-scroll to bottom
   useEffect(() => {
@@ -254,6 +353,7 @@ export default function UploadPage() {
   const resetForNewAnalysis = () => {
     setPhase('idle');
     setFileName('');
+    setFileSize(null);
     setSeverity(null);
     setAnalysisId(null);
     setUploadError(null);
@@ -274,6 +374,7 @@ export default function UploadPage() {
     }
 
     setFileName(file.name);
+    setFileSize(file.size);
     setPhase('uploading');
     setMessages([]);
     setSeverity(null);
@@ -502,9 +603,30 @@ export default function UploadPage() {
       {/* Scrollable chat area */}
       <div ref={scrollRef} className="flex-1 overflow-y-auto">
         <div className="max-w-3xl mx-auto px-6 lg:px-8 py-6">
-          {/* File name header */}
-          <div className="mb-4 text-center">
-            <p className="text-xs text-gray-400">{fileName}</p>
+          {/* File name header with size + cancel */}
+          <div className="mb-4 flex items-center justify-center gap-3">
+            <p className="text-xs text-gray-400">
+              {fileName}
+              {fileSize != null && (
+                <span className="ml-1.5 text-gray-300">
+                  · {fileSize < 1024 * 1024
+                    ? `${(fileSize / 1024).toFixed(0)} KB`
+                    : `${(fileSize / (1024 * 1024)).toFixed(1)} MB`}
+                </span>
+              )}
+            </p>
+            {(phase === 'uploading' || (phase === 'analyzing' && analysisStreaming)) && (
+              <button
+                onClick={() => {
+                  cancelRef.current?.();
+                  resetForNewAnalysis();
+                }}
+                className="text-gray-400 hover:text-red-500 transition-colors"
+                title="Cancel analysis"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
           </div>
 
           {/* Uploading state */}
@@ -546,27 +668,52 @@ export default function UploadPage() {
             />
           )}
 
-          {/* Suggested follow-up questions */}
+          {/* Contextual follow-up suggestions + sources */}
           {phase === 'chat' && messages.length === 0 && analysisId && (
-            <div className="mt-4 ml-11 flex flex-wrap gap-2">
-              {[
-                'What should I fix first?',
-                'How do I resolve the image pull errors?',
-                'Are there any other risks I should watch for?',
-                'Can you walk me through the root cause?',
-              ].map((q, i) => (
-                <button
-                  key={q}
-                  onClick={() => {
-                    setInput(q);
-                    setTimeout(() => { inputRef.current?.focus(); }, 0);
-                  }}
-                  className="animate-chip-in text-xs bg-white border border-gray-200 hover:border-blue-300 hover:bg-blue-50 text-gray-600 hover:text-blue-700 rounded-full px-3 py-1.5 transition-colors shadow-sm hover:shadow"
-                  style={{ animationDelay: `${i * 80}ms` }}
-                >
-                  {q}
-                </button>
-              ))}
+            <div className="mt-4 ml-11 space-y-3">
+              {/* Suggested questions based on actual findings */}
+              <div className="flex flex-wrap gap-2">
+                {(() => {
+                  const questions: string[] = ['What should I fix first?'];
+                  const rules = ruleFindings.map(f => f.rule);
+                  if (rules.some(r => /CrashLoopBackOff/i.test(r)))
+                    questions.push('Why is the pod crash looping and how do I fix it?');
+                  if (rules.some(r => /ImagePullBackOff|ErrImagePull/i.test(r)))
+                    questions.push('How do I resolve the image pull errors?');
+                  if (rules.some(r => /OOMKilled/i.test(r)))
+                    questions.push('What memory limits should I set to prevent OOMKill?');
+                  if (rules.some(r => /NodeNotReady/i.test(r)))
+                    questions.push('Why is the node not ready?');
+                  if (rules.some(r => /FailedScheduling/i.test(r)))
+                    questions.push('Why are pods failing to schedule?');
+                  if (questions.length < 3)
+                    questions.push('Are there any other risks I should watch for?');
+                  if (questions.length < 4)
+                    questions.push('Can you walk me through the root cause?');
+                  return questions.slice(0, 4).map((q, i) => (
+                    <button
+                      key={q}
+                      onClick={() => {
+                        setInput(q);
+                        setTimeout(() => { inputRef.current?.focus(); }, 0);
+                      }}
+                      className="animate-chip-in text-xs bg-white border border-gray-200 hover:border-blue-300 hover:bg-blue-50 text-gray-600 hover:text-blue-700 rounded-full px-3 py-1.5 transition-colors shadow-sm hover:shadow"
+                      style={{ animationDelay: `${i * 80}ms` }}
+                    >
+                      {q}
+                    </button>
+                  ));
+                })()}
+              </div>
+
+              {/* Files analyzed toggle */}
+              {ruleFindings.length > 0 && (() => {
+                const files = [...new Set(ruleFindings.map(f => f.file_path).filter(Boolean))];
+                if (files.length === 0) return null;
+                return (
+                  <SourcesToggle files={files as string[]} />
+                );
+              })()}
             </div>
           )}
 

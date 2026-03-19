@@ -210,6 +210,29 @@ async def analyze_bundle(
 Analyze this support bundle and respond using valid Markdown with proper heading syntax.
 You MUST use ## and ### prefixes for headings. Do NOT output headings as plain text.
 
+IMPORTANT RULES:
+1. The SEVERITY you output MUST match the highest severity found in the rule-based findings above.
+   If the highest finding severity is "warning", you MUST output "SEVERITY: warning" — do NOT escalate to "critical" on your own.
+   If there are no findings, use your best judgment.
+2. The files listed above are SNAPSHOTS from a support bundle — they are NOT editable files.
+   Never tell the user to edit a bundle file path. Instead, recommend changes to their actual
+   Kubernetes manifests (Deployment YAML, Helm values, ConfigMaps) or kubectl commands.
+3. Only suggest kubectl commands and flags that actually exist. Do not invent flags.
+   Common valid commands: kubectl set resources (--limits, --requests for cpu/memory ONLY),
+   kubectl set image, kubectl scale, kubectl rollout restart, kubectl patch, kubectl describe,
+   kubectl logs, kubectl edit, kubectl apply -f.
+   NEVER use: --limits=openfiles (not a real flag), --limits=ulimit, or any invented flags.
+   For ulimits/file descriptors, show a YAML manifest patch instead of a kubectl command.
+   For memory/CPU changes, use: kubectl set resources deployment/<name> --limits=memory=<val> --limits=cpu=<val>
+
+CONFIDENCE SCORING — you MUST use this system:
+- **High** — The automated scanner independently detected this pattern (it appears in the rule-based findings above). Corroborated by two systems.
+- **Medium** — You identified this from reading the logs/state, but no scanner rule flagged it. Single-source finding.
+- **Low** — You are inferring this from indirect evidence or the absence of expected data.
+
+When citing evidence, reference the bundle file path and line content as a SOURCE (where you saw it),
+not as a file to edit. Format evidence as: `[source: path/to/file]`.
+
 Use this EXACT format (note the ## and ### prefixes are required):
 
 SEVERITY: critical/warning/info
@@ -221,8 +244,8 @@ SEVERITY: critical/warning/info
 
 ### [Issue Name]
 - **Status**: [What's happening]
-- **Evidence**: [Specific log lines or state that proves this]
-- **Confidence**: [High/Medium/Low]
+- **Evidence**: [Specific log lines or state — cite source file in brackets] `[source: path/to/file]`
+- **Confidence**: High/Medium/Low
 - **Affected Resources**: [Pod names, namespaces, etc.]
 
 ### [Next Issue Name]
@@ -232,10 +255,28 @@ SEVERITY: critical/warning/info
 [What's actually causing these issues and how they relate]
 
 ## Recommended Actions
-1. [First action — most urgent]
-2. [Second action]
-3. [Third action]
-4. [Additional actions as needed]"""
+
+For each action, show what the user should ACTUALLY do — edit their Deployment YAML, Helm values, or run a kubectl command.
+Do NOT reference bundle snapshot files as things to edit.
+
+### 1. [Action title]
+[Brief explanation of why]
+
+```before
+[what their current manifest/config likely looks like based on the evidence]
+```
+
+```after
+[what it should look like after the fix]
+```
+
+Or if the fix is a command:
+
+```bash
+[real kubectl/helm command — only use flags that actually exist]
+```
+
+Repeat for each recommended action (typically 2-4)."""
 
     # Signal that AI analysis is starting
     yield f"data: {json.dumps({'type': 'status', 'step': 'analyzing', 'message': 'Running AI analysis...'})}\n\n"

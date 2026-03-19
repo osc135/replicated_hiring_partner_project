@@ -128,13 +128,18 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-xs font-medium">{bundle.filename}</p>
                       <div className="flex items-center gap-2 mt-0.5">
-                        {bundle.severity && (
-                          <span className={`w-1.5 h-1.5 rounded-full ${severityDot[bundle.severity] || severityDot.info}`} />
+                        {bundle.status === 'completed' && (
+                          <span className={`w-1.5 h-1.5 rounded-full ${bundle.severity ? severityDot[bundle.severity] || severityDot.info : 'bg-green-500'}`} />
                         )}
                         <span className="text-xs text-slate-500">
                           {new Date(bundle.uploaded_at).toLocaleDateString(undefined, {
                             month: 'short',
                             day: 'numeric',
+                          })}
+                          {' · '}
+                          {new Date(bundle.uploaded_at).toLocaleTimeString(undefined, {
+                            hour: 'numeric',
+                            minute: '2-digit',
                           })}
                         </span>
                         {bundle.status === 'processing' && (

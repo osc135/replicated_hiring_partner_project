@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Upload, Loader2 } from 'lucide-react';
+import { Upload, Loader2, Search, MessageSquare, BarChart3 } from 'lucide-react';
 import { getDashboardData, type DashboardData } from '../api';
 import StatsCards from '../components/StatsCards';
 import ClusterHealthMap from '../components/ClusterHealthMap';
@@ -15,6 +15,8 @@ export default function DashboardPage() {
   const navigate = useNavigate();
   const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
   const [dashboardLoading, setDashboardLoading] = useState(true);
+  const [dragOver, setDragOver] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     setDashboardLoading(true);
@@ -131,27 +133,89 @@ export default function DashboardPage() {
     );
   }
 
-  // Empty state: centered drop zone (first-time user)
+  // Empty state: welcoming onboarding experience
+  const handleFile = (file: File) => {
+    if (!file.name.endsWith('.tar.gz') && !file.name.endsWith('.tgz')) return;
+    // Navigate to upload page and let it handle the file
+    navigate('/upload', { state: { file } });
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragOver(false);
+    const file = e.dataTransfer.files[0];
+    if (file) handleFile(file);
+  };
+
   return (
-    <div className="flex-1 overflow-auto p-6 lg:p-8">
-      <div className="max-w-4xl mx-auto flex flex-col items-center justify-center min-h-[60vh]">
-        <div className="w-full max-w-lg text-center">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl mb-4 bg-gray-100">
-            <Upload className="h-8 w-8 text-gray-400" />
+    <div
+      className="flex-1 overflow-auto p-6 lg:p-8"
+      onDrop={handleDrop}
+      onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+      onDragLeave={() => setDragOver(false)}
+    >
+      <div className="max-w-3xl mx-auto flex flex-col items-center justify-center min-h-[70vh]">
+        {/* Welcome header */}
+        <div className="text-center mb-8">
+          <h1 className="text-2xl font-bold text-gray-900">
+            Kubernetes Bundle Analyzer
+          </h1>
+          <p className="text-sm text-gray-500 mt-2 max-w-md mx-auto">
+            Upload a Troubleshoot support bundle and get an AI-powered diagnosis
+            with root cause analysis, severity scoring, and remediation steps.
+          </p>
+        </div>
+
+        {/* Drop zone */}
+        <div
+          onClick={() => fileInputRef.current?.click()}
+          className={`w-full max-w-lg border-2 border-dashed rounded-2xl p-12 cursor-pointer transition-all duration-200 text-center ${
+            dragOver
+              ? 'border-blue-500 bg-blue-50 scale-[1.02] shadow-lg shadow-blue-100'
+              : 'border-gray-300 bg-white hover:border-blue-400 hover:bg-gray-50 hover:shadow-md'
+          }`}
+        >
+          <div className={`inline-flex items-center justify-center w-14 h-14 rounded-2xl mb-3 transition-colors ${
+            dragOver ? 'bg-blue-100' : 'bg-gray-100'
+          }`}>
+            <Upload className={`h-7 w-7 transition-colors ${dragOver ? 'text-blue-500' : 'text-gray-400'}`} />
           </div>
           <p className="text-base font-medium text-gray-700">
-            No analyses yet
+            {dragOver ? 'Drop it here' : 'Drop your support bundle here'}
           </p>
           <p className="text-sm text-gray-400 mt-1.5">
-            Upload a Kubernetes support bundle to get started
+            <span className="font-mono text-xs bg-gray-100 px-1.5 py-0.5 rounded">.tar.gz</span> or{' '}
+            <span className="font-mono text-xs bg-gray-100 px-1.5 py-0.5 rounded">.tgz</span>
           </p>
-          <button
-            onClick={() => navigate('/upload')}
-            className="mt-6 inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-5 py-2.5 rounded-lg transition-colors shadow-sm"
-          >
-            <Upload className="h-4 w-4" />
-            Analyze Bundle
-          </button>
+          <p className="text-sm text-blue-600 font-medium mt-3">or click to browse files</p>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".tar.gz,.tgz"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) handleFile(file);
+              e.target.value = '';
+            }}
+          />
+        </div>
+
+        {/* Feature hints */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-10 w-full max-w-lg">
+          {[
+            { icon: Search, title: 'Pattern Detection', desc: 'Scans for CrashLoopBackOff, OOMKilled, and 10+ K8s failure patterns' },
+            { icon: MessageSquare, title: 'AI Diagnosis', desc: 'GPT-4o analyzes root cause and suggests specific remediation steps' },
+            { icon: BarChart3, title: 'Cluster Overview', desc: 'Pod health, node status, event timeline, and severity trends' },
+          ].map(({ icon: Icon, title, desc }) => (
+            <div key={title} className="text-center p-3">
+              <div className="inline-flex items-center justify-center w-9 h-9 rounded-lg bg-gray-50 border border-gray-100 mb-2">
+                <Icon className="h-4 w-4 text-gray-500" />
+              </div>
+              <p className="text-sm font-medium text-gray-700">{title}</p>
+              <p className="text-xs text-gray-400 mt-0.5 leading-relaxed">{desc}</p>
+            </div>
+          ))}
         </div>
       </div>
     </div>
