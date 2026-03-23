@@ -28,7 +28,7 @@ Upload .tar.gz  →  Extract  →  Rule Scanner (20 rules)  →  LLM Analysis (G
 
 ```bash
 # 1. Clone the repo
-git clone <repo-url> && cd replicated-bundle-analyzer
+git clone <https://github.com/osc135/replicated_hiring_partner_project> && cd replicated-bundle-analyzer
 
 # 2. Set up environment
 cp .env.example .env
